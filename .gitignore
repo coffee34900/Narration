@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# Node (restore with: npm install in renderer/)
+node_modules/
+
+# Portable tools & downloaded models (recreated by scripts/install.ps1)
+tools/
+models/
+
+# Generated videos, your projects/scripts/narrations
+outputs/
+projects/
+*.mp4
+*.wav
+*.mp3
+# ...except the synthetic Windows-TTS test audio the tests need
+!tests/fixtures/*.wav
+
+# Claude Code local settings
+.claude/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env

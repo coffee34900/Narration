@@ -1,0 +1,8 @@
+Part one. Bell inequalities in brief.
+In 1964, John Bell showed that local hidden variable theories obey a strict bound. The CHSH form of that bound is two. Quantum mechanics predicts a larger value, two root two, which is about 2.83.
+
+Part two. What the experiments measured.
+Aspect and colleagues tested the inequality with entangled photons, e.g. in their 1982 experiment. They reported a violation by more than five standard deviations. Later loophole-free tests in 2015 used about 245 trials per setting in one design. Roughly seventy-five percent of the analysed runs met the timing criterion.
+
+Part three. How to read the result.
+The authors interpret the violation as evidence against local realism. In my view, the cleanest summary is that the classical limit of two is exceeded. Bear in mind that the detection efficiency was 0.08 below the target in early setups, as F. M. Scherer noted.

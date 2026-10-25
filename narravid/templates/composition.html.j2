@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ comp_id }}</title>
+<link rel="stylesheet" href="assets/katex/katex.min.css">
+<script src="assets/gsap.min.js"></script>
+<script src="assets/MotionPathPlugin.min.js"></script>
+<style>{{ css_vars|safe }}
+{{ css|safe }}</style>
+</head>
+<body>
+<div id="root" data-composition-id="{{ comp_id }}" data-start="0" data-duration="{{ duration }}" data-fps="{{ fps }}"
+     data-width="1920" data-height="1080">
+  <div class="bg-glow" id="bg-glow"></div><div class="bg-drift" id="bg-drift"></div>
+{% for h in headers %}
+  <div id="{{ h.id }}" class="clip header" data-start="{{ h.start }}" data-duration="{{ h.duration }}" data-track-index="2"{{ ' data-cont="1"' if h.cont else '' }}><b>{{ h.kicker }}</b><span class="tx">{{ h.title }}</span></div>
+{% endfor %}
+{% for sc in scenes %}
+  <div id="sc_{{ sc.id }}" class="clip scene" data-scene="{{ sc.id }}" data-start="{{ sc.start }}" data-duration="{{ sc.duration }}" data-track-index="1">
+    {{ sc.html|safe }}
+    {% if sc.tag and sc.tag != 'none' %}<div class="tag c-{{ sc.tag }}" data-rv="{{ sc.start }}"><i></i><span class="tx">{{ sc.tag_label }}</span></div>{% endif %}
+    {% if sc.schematic %}<div class="schematic tx{{ ' quiet' if sc.quiet_schematic else '' }}" data-rv="{{ sc.start }}">{{ 'Schematic' if sc.quiet_schematic else 'Schematic · illustrative, not data' }}</div>{% endif %}
+  </div>
+{% endfor %}
+  <audio id="narration" data-start="0" data-duration="{{ duration }}" data-track-index="0" data-volume="1" src="assets/narration.wav"></audio>
+</div>
+<script>
+(function () {
+  // Deterministic: one paused timeline, every tween at an absolute composition time.
+  var M = {{ motion|tojson }};
+  var tl = gsap.timeline({ paused: true });
+  document.querySelectorAll(".scene").forEach(function (el) {
+    var s = parseFloat(el.dataset.start), d = parseFloat(el.dataset.duration);
+    tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: Math.min(M.scene_in, d / 3), ease: "power1.out" }, s);
+    if (d > M.scene_out + M.scene_in + 0.2)
+      tl.fromTo(el, { opacity: 1 }, { opacity: 0, duration: M.scene_out, ease: "power1.in", immediateRender: false }, s + d - M.scene_out);
+  });
+  document.querySelectorAll(".header:not([data-cont])").forEach(function (el) {
+    var s = parseFloat(el.dataset.start);
+    tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: M.scene_in }, s);
+  });
+  document.querySelectorAll("[data-rv]").forEach(function (el) {
+    var t = parseFloat(el.dataset.rv);
+    tl.fromTo(el, { opacity: 0, y: M.item_rise }, { opacity: 1, y: 0, duration: M.item_in, ease: "power2.out" }, t);
+  });
+  document.querySelectorAll("[data-grow]").forEach(function (el) {
+    tl.fromTo(el, { scaleX: 0 }, { scaleX: 1, duration: 0.8, ease: "power2.out" }, parseFloat(el.dataset.grow));
+  });
+  document.querySelectorAll("[data-draw]").forEach(function (el) {
+    var d = el.classList.contains("dg-edge") ? 0.9 : 1.4;
+    tl.fromTo(el, { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: d, ease: "power1.inOut" }, parseFloat(el.dataset.draw));
+  });
+  // ---- motion graphics -------------------------------------------------------
+  if (window.MotionPathPlugin) gsap.registerPlugin(MotionPathPlugin);
+  tl.fromTo("#bg-drift", { x: 0, y: 0 }, { x: -120, y: -70, duration: {{ duration }}, ease: "none" }, 0);
+  tl.fromTo("#bg-glow", { x: 0, y: 0 }, { x: 380, y: 160, duration: {{ duration }}, ease: "sine.inOut" }, 0);
+  document.querySelectorAll("[data-pop]").forEach(function (el) {       // nodes pop in
+    tl.fromTo(el, { opacity: 0, scale: 0.5 }, { opacity: 1, scale: 1, duration: 0.65, ease: "back.out(1.8)" }, parseFloat(el.dataset.pop));
+  });
+  document.querySelectorAll("[data-spin]").forEach(function (el) {      // kinetic typography: sentence in / out
+    tl.fromTo(el, { opacity: 0, yPercent: -40 }, { opacity: 1, yPercent: -50, duration: 0.5, ease: "power2.out" }, parseFloat(el.dataset.spin));
+    if (el.dataset.spout) tl.fromTo(el, { opacity: 1, yPercent: -50 }, { opacity: 0, yPercent: -62, duration: 0.35, ease: "power1.in", immediateRender: false }, parseFloat(el.dataset.spout));
+  });
+  document.querySelectorAll("[data-lit]").forEach(function (el) {       // each word lights up as it is spoken
+    tl.fromTo(el, { opacity: 0.22 }, { opacity: 1, duration: 0.2, ease: "none", immediateRender: false }, parseFloat(el.dataset.lit));
+  });
+  document.querySelectorAll("[data-fade]").forEach(function (el) {      // opacity only (keeps SVG transforms)
+    tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.4 }, parseFloat(el.dataset.fade));
+  });
+  document.querySelectorAll("[data-ripple]").forEach(function (el) {    // one ring expands as a node appears
+    tl.fromTo(el, { opacity: 0.7, scale: 1 }, { opacity: 0, scale: 1.9, duration: 1.1, ease: "power2.out", immediateRender: false }, parseFloat(el.dataset.ripple) + 0.2);
+  });
+  document.querySelectorAll("[data-icondraw]").forEach(function (el) {  // icons draw themselves
+    tl.fromTo(el.children, { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.9, stagger: 0.08, ease: "power1.inOut" }, parseFloat(el.dataset.icondraw));
+  });
+  document.querySelectorAll("[data-march]").forEach(function (el) {     // "becomes": dashes march along
+    var t = parseFloat(el.dataset.march), end = parseFloat(el.closest(".dg").dataset.camEnd);
+    tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.6 }, t);
+    if (end - t > 0.8) tl.fromTo(el, { strokeDashoffset: 0 }, { strokeDashoffset: -0.11 * (end - t), duration: end - t, ease: "none", immediateRender: false }, t);
+  });
+  document.querySelectorAll("[data-flow]").forEach(function (el) {      // particles travel along flows
+    var path = document.getElementById(el.dataset.flow), t = parseFloat(el.dataset.t), end = parseFloat(el.dataset.end);
+    var dur = 1.8, n = Math.floor((end - t - 0.5) / dur);
+    if (!path || n < 1 || !window.MotionPathPlugin) return;
+    tl.set(el, { opacity: 1 }, t);
+    tl.to(el, { motionPath: { path: path, align: path, alignOrigin: [0.5, 0.5] }, duration: dur, repeat: n - 1, ease: "none", immediateRender: false }, t);
+    tl.set(el, { opacity: 0 }, t + n * dur);
+  });
+  document.querySelectorAll(".dg-focus").forEach(function (f) {         // the node being discussed
+    var t = parseFloat(f.dataset.t), u = parseFloat(f.dataset.until);
+    var disc = document.getElementById(f.dataset.node).querySelector(".dg-disc");
+    var others = f.dataset.others.split(" ").filter(Boolean).map(function (id) { return document.getElementById(id); });
+    tl.fromTo(disc, { scale: 1 }, { scale: 1.18, duration: 0.5, ease: "power2.out", immediateRender: false }, t);
+    tl.fromTo(disc, { scale: 1.18 }, { scale: 1, duration: 0.5, ease: "power2.in", immediateRender: false }, u);
+    if (others.length) {
+      tl.fromTo(others, { opacity: 1 }, { opacity: 0.35, duration: 0.5, immediateRender: false }, t);
+      tl.fromTo(others, { opacity: 0.35 }, { opacity: 1, duration: 0.5, immediateRender: false }, u);
+    }
+  });
+  document.querySelectorAll("[data-cam]").forEach(function (el) {       // slow camera push-in
+    var s = parseFloat(el.dataset.cam), e = parseFloat(el.dataset.camEnd);
+    if (e - s > 1) tl.fromTo(el, { scale: 1 }, { scale: 1.035, duration: e - s, ease: "none", immediateRender: false }, s);
+  });
+  document.querySelectorAll("[data-count]").forEach(function (el) {     // numbers count up to the stated value
+    var v = parseFloat(el.dataset.count), dec = parseInt(el.dataset.dec || "0", 10), sep = el.dataset.sep === "1";
+    var fmt = function (x) { var s = (+x).toFixed(dec); return sep ? Number(s).toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec }) : s; };
+    tl.fromTo(el, { innerText: 0 }, { innerText: v, duration: 1.3, ease: "power2.out", modifiers: { innerText: fmt } }, parseFloat(el.dataset.t));
+  });
+  tl.set({}, {}, {{ duration }});
+  window.__timelines = window.__timelines || {};
+  window.__timelines["{{ comp_id }}"] = tl;
+})();
+</script>
+</body>
+</html>

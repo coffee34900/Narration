@@ -1,0 +1,206 @@
+{#- One macro per storyboard template. Each element that should appear when narrated has
+    data-rv="<seconds>" (composition-local time). Text leaves carry class "tx" for layout QA. -#}
+
+{% macro title(s, cls) -%}
+<h1 class="title {{ cls }} tx" data-rv="{{ s._t0 }}"><span>{{ s.title }}</span></h1>
+{%- endmacro %}
+
+{% macro part_title(s, cls, legend) -%}
+<div class="pt-wrap">
+  {% if s.subtitle %}<div class="pt-kicker tx" data-rv="{{ s._t0 }}">{{ s.subtitle }}</div>{% endif %}
+  <div class="pt-title tx" data-rv="{{ s._t0 + 0.2 }}">{{ s.title }}</div>
+  <div class="pt-rule" data-rv="{{ s._t0 + 0.4 }}"></div>
+</div>
+{% if legend %}
+<div class="legend" data-rv="{{ s._t0 + 0.9 }}">
+  {% for role, label in legend %}<div class="c-{{ role }} tx"><i></i><span>{{ label }}</span></div>{% endfor %}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro title_card(s, cls) -%}
+<div class="tc-wrap">
+  <div class="tc-title tx {{ cls }}" data-rv="{{ s._t0 }}"><span style="color:var(--text)">{{ s.title }}</span></div>
+  {% if s.subtitle %}<div class="tc-sub tx" data-rv="{{ s._t0 + 0.4 }}">{{ s.subtitle }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro bullet_list(s, cls, recap=False) -%}
+<div class="content">
+  {{ title(s, cls) }}
+  <ul class="bl {{ 'big' if s['items']|length <= 3 else '' }}">
+    {% for it in s['items'] %}
+    <li class="{{ cls }}" data-rv="{{ it._t }}">{% if recap %}<span class="ck">✓</span>{% else %}<span class="dot"></span>{% endif %}<span class="tx">{{ it.text }}</span></li>
+    {% endfor %}
+  </ul>
+</div>
+{%- endmacro %}
+
+{% macro spoken(s, cls) -%}
+<div class="sp-wrap">
+  {% for b in s._spoken %}
+  <div class="sp-sent tx" style="font-size:{{ b.size }}px" data-spin="{{ b.t_in }}"{% if b.t_out %} data-spout="{{ b.t_out }}"{% endif %}>
+    {%- for w in b.words %}<span class="sp-w{{ ' key' if w.key else '' }}" data-lit="{{ w.t }}">{{ w.text }}</span> {% endfor -%}
+  </div>
+  {% endfor %}
+</div>
+{%- endmacro %}
+
+{% macro diagram(s, cls) -%}
+<div class="content">{{ title(s, cls) }}</div>
+{{ s._diagram_html|safe }}
+{%- endmacro %}
+
+{% macro key_number(s, cls) -%}
+<div class="content">
+  {{ title(s, cls) }}
+  <div class="kn-wrap">
+    {% set c = s._count %}
+    <div class="kn-value {{ cls }} tx" data-rv="{{ s._tv }}">{% if c %}{{ c.prefix }}<span data-count="{{ c.value }}" data-dec="{{ c.dec }}" data-sep="{{ 1 if c.sep else 0 }}" data-t="{{ s._tv }}">{{ c.text }}</span>{{ c.suffix }}{% else %}{{ s.value }}{% endif %}</div>
+    <div class="kn-label tx" data-rv="{{ s._tv + 0.3 }}">{{ s.label }}</div>
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro equation(s, cls, math_html) -%}
+<div class="content">
+  {{ title(s, cls) }}
+  <div class="eq-steps">
+    {% for m in math_html %}<div class="eq-step tx" data-rv="{{ s._tm[loop.index0] }}">{{ m|safe }}</div>{% endfor %}
+  </div>
+  {% if s['items'] %}
+  <ul class="eq-notes">{% for it in s['items'] %}<li class="tx" data-rv="{{ it._t }}">{{ it.text }}</li>{% endfor %}</ul>
+  {% endif %}
+</div>
+{%- endmacro %}
+
+{% macro comparison(s, cls) -%}
+<div class="content">
+  {{ title(s, cls) }}
+  <div class="cols">
+    {% for c in s.columns %}
+    <div class="col" data-rv="{{ c._t }}">
+      <div class="col-h tx c-{{ series[loop.index0] }}">{{ c.heading }}</div>
+      <ul>{% for it in c['items'] %}<li class="tx" data-rv="{{ it._t }}">{{ it.text }}</li>{% endfor %}</ul>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro table(s, cls) -%}
+<div class="content">
+  {{ title(s, cls) }}
+  <table class="tbl">
+    <thead><tr class="{{ cls }}" data-rv="{{ s.table._t }}">{% for h in s.table.headers %}<th class="tx">{{ h }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for r in s.table.rows %}<tr data-rv="{{ s.table._t + 0.35 * loop.index }}">{% for c in r %}<td class="tx">{{ c }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+  </table>
+</div>
+{%- endmacro %}
+
+{% macro timeline(s, cls, g) -%}
+<div class="content">
+  {{ title(s, cls) }}
+  <div class="tl">
+    <div class="tl-axis" data-rv="{{ s._t0 }}"></div>
+    {% for it in s['items'] %}
+    <div class="tl-ev {{ cls }}" style="left:{{ g.x[loop.index0] }}px" data-rv="{{ it._t }}">
+      <div class="tl-when tx">{{ it.when }}</div><div class="tl-dot"></div><div class="tl-text tx">{{ it.text }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro number_line(s, cls, g) -%}
+<div class="content">
+  {{ title(s, cls) }}
+  <div class="nl">
+    <svg width="1680" height="560" style="position:absolute;left:0;top:0">
+      <line x1="{{ g.x0 }}" y1="{{ g.y }}" x2="{{ g.x1 }}" y2="{{ g.y }}" stroke="var(--line)" stroke-width="6" stroke-linecap="round" data-rv="{{ s._t0 }}"/>
+      {% for t in g.ticks %}<line x1="{{ t.x }}" y1="{{ g.y - 16 }}" x2="{{ t.x }}" y2="{{ g.y + 16 }}" stroke="var(--muted)" stroke-width="3" data-rv="{{ s._t0 }}"/>{% endfor %}
+      {% for m in g.marks %}
+        {% if m.range %}
+        <g data-rv="{{ m.t }}"><rect x="{{ m.x }}" y="{{ g.y - 14 }}" width="{{ m.w }}" height="28" rx="8" fill="var(--{{ m.color }})" opacity=".85"/>
+        <path d="M{{ m.x }},{{ m.by }} q0,{{ m.bd }} {{ m.w/2 }},{{ m.bd }} q{{ m.w/2 }},0 {{ m.w/2 }},{{ -m.bd }}" fill="none" stroke="var(--{{ m.color }})" stroke-width="3" transform="translate(0,0)"/></g>
+        {% else %}
+        <g data-rv="{{ m.t }}"><circle cx="{{ m.x }}" cy="{{ g.y }}" r="15" fill="var(--{{ m.color }})" stroke="var(--bg)" stroke-width="5"/></g>
+        {% endif %}
+      {% endfor %}
+    </svg>
+    {% for t in g.ticks %}<div class="nl-tick tx" style="left:{{ t.x - 100 }}px;width:200px;top:{{ g.y + 30 }}px" data-rv="{{ s._t0 }}">{{ t.label }}</div>{% endfor %}
+    {% for m in g.marks %}
+    <div class="nl-lab tx c-{{ m.color }}" style="left:{{ m.lx - 200 }}px;width:400px;top:{{ m.ly }}px" data-rv="{{ m.t }}"><b>{{ m.vlabel }}</b><span style="color:var(--text)">{{ m.text }}</span></div>
+    {% endfor %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro bar_chart(s, cls, g) -%}
+<div class="content">
+  {{ title(s, cls) }}
+  <div class="bars">
+    {% for b in g.bars %}
+    <div class="bar-row" data-rv="{{ b.t }}">
+      <div class="bar-l tx">{{ b.label }}</div>
+      <div class="bar-track" style="flex-basis:{{ g.track }}px"><div class="bar c-{{ b.color }} grow" style="width:{{ b.w }}px" data-grow="{{ b.t }}"></div></div>
+      <div class="bar-v tx c-{{ b.color }}">{{ b.vlabel }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro line_chart(s, cls, g) -%}
+<div class="content">
+  {{ title(s, cls) }}
+  <div class="lc">
+    <div class="lc-y"><span class="tx">{{ (s.axis or {}).y_label }}</span></div>
+    <svg width="1200" height="480" style="position:absolute;left:70px;top:0">
+      <line x1="10" y1="10" x2="10" y2="460" stroke="var(--line)" stroke-width="4"/>
+      <line x1="10" y1="460" x2="1110" y2="460" stroke="var(--line)" stroke-width="4"/>
+      {% for c in g.curves %}<path d="{{ c.d }}" fill="none" stroke="var(--{{ c.color }})" stroke-width="7" stroke-linecap="round" class="draw" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" data-draw="{{ c.t }}"/>{% endfor %}
+    </svg>
+    <div class="lc-x tx">{{ (s.axis or {}).x_label }}</div>
+    <div class="lc-leg">{% for c in g.curves %}<div class="c-{{ c.color }}" data-rv="{{ c.t }}"><i></i><span class="tx">{{ c.label }}</span></div>{% endfor %}</div>
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro flow(s, cls) -%}
+<div class="content">
+  {{ title(s, cls) }}
+  <div class="flow n{{ s['items']|length if s['items']|length == 4 else 3 }}">
+    {% for it in s['items'] %}
+      {% if not loop.first %}<div class="farrow" data-rv="{{ it._t }}">{{ '→' }}</div>{% endif %}
+      <div class="fbox {{ cls }}" data-rv="{{ it._t }}"><div class="num">{{ loop.index }}</div><div class="tx">{{ it.text }}</div></div>
+    {% endfor %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro cards_grid(s, cls) -%}
+<div class="content">
+  {{ title(s, cls) }}
+  <div class="grid n{{ s['items']|length }}">
+    {% for it in s['items'] %}
+    <div class="card" data-rv="{{ it._t }}"><div class="card-h tx c-{{ series[loop.index0 % series|length] }}">{{ it.head }}</div><div class="card-t tx">{{ it.text }}</div></div>
+    {% endfor %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro quote_or_definition(s, cls) -%}
+<div class="content">
+  {{ title(s, cls) }}
+  {% if (s.quote or {}).attribution %}
+  <div class="q-wrap">
+    <div class="q-mark {{ cls }}" data-rv="{{ s._t0 }}">“</div>
+    <div class="q-text tx" data-rv="{{ s._t0 + 0.3 }}">{{ s.quote.text }}</div>
+    <div class="q-attr tx" data-rv="{{ s._t0 + 0.6 }}">— {{ s.quote.attribution }}</div>
+  </div>
+  {% else %}
+  <div class="def-text tx" data-rv="{{ s._t0 + 0.3 }}">{{ (s.quote or {}).text }}</div>
+  {% endif %}
+</div>
+{%- endmacro %}

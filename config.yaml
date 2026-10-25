@@ -1,0 +1,101 @@
+paths:
+  projects_dir: projects
+  ffmpeg: ''
+  ffprobe: ''
+  node: ''
+  renderer_dir: renderer
+llm:
+  backend: ollama
+  model: qwen3.5:4b
+  base_url: http://localhost:11434
+  temperature: 0.2
+  max_retries: 3
+  timeout_s: 600
+  think: false
+  num_ctx: 4096
+  self_check: true
+  num_gpu: 99
+model_selection:
+  reason: qwen3.5:4b has the lowest parameter count (4.66B, from metadata (general.parameter_count))
+    among 3 usable instruction-tuned chat model(s).
+  detected:
+  - source: ollama
+    name: qwen2.5:7b
+    params: 7615616512.0
+    params_from: metadata (general.parameter_count)
+    capabilities:
+    - completion
+    - tools
+    usable: true
+    why: usable chat model
+  - source: ollama
+    name: qwen3.5:4b
+    params: 4659865088.0
+    params_from: metadata (general.parameter_count)
+    capabilities:
+    - completion
+    - vision
+    - tools
+    - thinking
+    usable: true
+    why: usable chat model
+  - source: ollama
+    name: qwen3.5:9b
+    params: 9653104368.0
+    params_from: metadata (general.parameter_count)
+    capabilities:
+    - completion
+    - vision
+    - tools
+    - thinking
+    usable: true
+    why: usable chat model
+asr:
+  engine: faster-whisper
+  model: small.en
+  model_dir: models/whisper
+  device: auto
+  compute_type: auto
+  language: en
+  beam_size: 5
+alignment:
+  min_insertion_words: 5
+  repetition_similarity: 0.6
+  omission_max_matched: 0.25
+  match_pct_warning: 85.0
+silence:
+  noise_db: -35
+  min_duration: 0.25
+  snap_window: 2.5
+storyboard:
+  max_sentences_per_scene: 5
+  max_items: 6
+  max_words_per_item: 12
+  max_title_words: 9
+checks:
+  math_trivial_numbers:
+  - 0
+  - 1
+  - 2
+render:
+  width: 1920
+  height: 1080
+  fps: 30
+  quality: looks
+  workers: auto
+  chunk_max_seconds: 90   # split long parts so the headless browser never holds minutes of animation
+  audio_bitrate: 192k
+  burn_captions: true
+  compressed_target_mb: 30
+  compressed_audio_kbps: 64
+  compressed_min_video_kbps: 120
+captions:
+  max_chars: 50
+  font_size: 44
+  min_duration: 0.8
+qa:
+  frame_interval_s: 10
+  sync_tolerance_s: 0.2
+gui:
+  host: 127.0.0.1
+  port: 8765
