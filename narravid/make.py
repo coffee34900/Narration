@@ -218,6 +218,22 @@ def make_safe(pr, cfg: dict, bad: dict[str, set[str]], level: int) -> int:
     return n
 
 
+def fix_facts(pr, cfg: dict, log=print) -> int:
+    """Run the checks and auto-replace every flagged scene, stricter each round. Returns scenes fixed."""
+    fixed = 0
+    for level in (-1, 0, 1):
+        run_stage(pr, "checks", log, use_llm=False)
+        ck = pr.read_json("checks.json")
+        if not ck["flagged"]:
+            break
+        fixed += make_safe(pr, cfg, _check_failures(ck), level)
+    run_stage(pr, "checks", log, use_llm=False)
+    ck = pr.read_json("checks.json")
+    if ck["flagged"] or [c for c in ck["coverage"] if c["level"] == "error"]:
+        raise RuntimeError("could not make every scene match the script")
+    return fixed
+
+
 def _check_failures(ck: dict) -> dict[str, set[str]]:
     return {sid: {r.get("field", "") for r in ck["scenes"][sid]["results"] if r["level"] == "error"}
             for sid in ck["flagged"]}
@@ -369,18 +385,8 @@ def _run(job: Job, audio_path: Path, script_path: Path | None, smart: bool) -> N
 
     # 4 — facts: auto-replace anything that is not traceable to the script ---------
     job._go("facts", "Double-checking every fact")
-    fixed = 0
-    for level in (-1, 0, 1):
-        run_stage(pr, "checks", log, use_llm=False)
-        ck = pr.read_json("checks.json")
-        if not ck["flagged"]:
-            break
-        fixed += make_safe(pr, cfg, _check_failures(ck), level)
-        job.step_progress = 0.5
-    run_stage(pr, "checks", log, use_llm=False)
-    ck = pr.read_json("checks.json")
-    if ck["flagged"] or [c for c in ck["coverage"] if c["level"] == "error"]:
-        raise RuntimeError("could not make every scene match the script")
+    fixed = fix_facts(pr, cfg, log)
+    job.step_progress = 0.5
     if fixed:
         job.notes.append(f"Simplified {fixed} slide(s) so everything on screen matches what is said exactly.")
 
@@ -393,7 +399,8 @@ def _run(job: Job, audio_path: Path, script_path: Path | None, smart: bool) -> N
         if lq["ok"]:
             break
         simplified += make_safe(pr, cfg, _layout_failures(lq), level)
-        run_stage(pr, "checks", log, use_llm=False)
+        # a simplified slide must pass the fact checks again, or rendering refuses it
+        simplified += fix_facts(pr, cfg, log)
     else:
         run_stage(pr, "compose", log)
     lq = pr.read_json("qa/layout.json")
