@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 
 TEMPLATES = ["part_title", "diagram", "spoken", "title_card", "bullet_list", "key_number", "equation", "comparison", "table",
-             "timeline", "number_line", "bar_chart", "line_chart", "flow", "cards_grid",
+             "timeline", "number_line", "bar_chart", "line_chart", "plot", "flow", "cards_grid",
              "quote_or_definition", "recap"]
 LAYOUTS = ["chain", "cycle", "hub", "versus", "layers", "tree"]
 EDGE_STYLES = ["flow", "arrow", "link", "becomes", "opposes"]
@@ -27,12 +27,14 @@ TEMPLATE_HELP = {
     "title_card": "a heading + one-line subtitle; for framing / transition sentences",
     "bullet_list": "2-6 short points revealed as they are mentioned",
     "key_number": "one striking number from the text with a short label",
-    "equation": "a formula that the sentences state explicitly (LaTeX), optional step-by-step",
+    "equation": "a formula the sentences state or spell out in words (\"E sub AB plus ... equals 2\"), built up step by step in LaTeX",
     "comparison": "2-3 columns contrasting options/groups/models, each with short points",
-    "table": "small table of values the sentences give (max 6 rows x 4 columns)",
+    "table": "a grid of values the sentences read out (rows/columns, probabilities, outcomes, truth tables; max 8 rows x 6 columns). Use it whenever the narration walks through rows, columns or cells",
     "timeline": "dated events in order (years/dates from the text)",
     "number_line": "values or ranges placed on one axis (thresholds, intervals, bounds)",
     "bar_chart": "a few quantities from the text compared as bars (values must be in the text)",
+    "plot": "an accurate function plot computed from a formula (physics/maths: waves, decays, potentials, "
+            "distributions, correlations vs angle), with marked bounds, thresholds and points",
     "line_chart": "a qualitative trend (rising, saturating, peak...) — always shown as schematic",
     "flow": "a process / causal chain as 2-6 boxes with arrows",
     "cards_grid": "2-6 parallel concepts, each a short head + one line",
@@ -70,7 +72,8 @@ SCENE_SCHEMA = {
         "table": {"type": "object", "properties": {
             "headers": {"type": "array", "items": {"type": "string"}},
             "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
-            "cue_sentence": {"type": "integer"}}},
+            "cue_sentence": {"type": "integer"},
+            "row_cues": {"type": "array", "items": {"type": "integer"}}}},
         "value": {"type": "string"},
         "label": {"type": "string"},
         "math": {"type": "array", "items": {"type": "string"}},
@@ -80,6 +83,7 @@ SCENE_SCHEMA = {
                                                   "unit": {"type": "string"}, "x_label": {"type": "string"},
                                                   "y_label": {"type": "string"}}},
         "unit": {"type": "string"},
+        "plot": {"type": "object"},
         "layout": {"type": "string", "enum": LAYOUTS},
         "nodes": {"type": "array", "items": {"type": "object", "properties": {
             "id": {"type": "string"}, "label": {"type": "string"}, "icon": {"type": "string"},
@@ -169,7 +173,8 @@ def content_schema(template: str, max_items: int = 6) -> dict:
         base.update({"value": {"type": "string"}, "label": {"type": "string"}})
         req += ["value", "label"]
     elif t == "equation":
-        base["math"] = {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 4}
+        base["math"] = {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 5}
+        base["math_cues"] = {"type": "array", "items": {"type": "integer"}, "maxItems": 5}
         base["items"] = {"type": "array", "items": _llm_item(), "maxItems": 3}
         req += ["math"]
     elif t == "comparison":
@@ -180,9 +185,11 @@ def content_schema(template: str, max_items: int = 6) -> dict:
         req.append("columns")
     elif t == "table":
         base["table"] = {"type": "object", "properties": {
-            "headers": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 4},
-            "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}, "minItems": 1, "maxItems": 6},
-            "cue_sentence": {"type": "integer"}}, "required": ["headers", "rows", "cue_sentence"]}
+            "headers": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 6},
+            "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}, "minItems": 1, "maxItems": 8},
+            "cue_sentence": {"type": "integer"},
+            "row_cues": {"type": "array", "items": {"type": "integer"}, "maxItems": 8}},
+            "required": ["headers", "rows", "cue_sentence", "row_cues"]}
         req.append("table")
     elif t == "number_line":
         base["axis"] = {"type": "object", "properties": {"min": {"type": "number"}, "max": {"type": "number"},
@@ -202,6 +209,22 @@ def content_schema(template: str, max_items: int = 6) -> dict:
                         "required": ["x_label", "y_label"]}
         base["items"] = {"type": "array", "minItems": 1, "maxItems": 3, "items": _llm_item("shape", required_extra=("shape",))}
         req += ["axis", "items"]
+    elif t == "plot":
+        bound = {"type": ["number", "string"]}
+        base["axis"] = {"type": "object", "properties": {"x_label": {"type": "string"}, "y_label": {"type": "string"}},
+                        "required": ["x_label", "y_label"]}
+        base["plot"] = {"type": "object", "properties": {
+            "x_min": bound, "x_max": bound,
+            "curves": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "object", "properties": {
+                "expr": {"type": "string"}, "label": {"type": "string"}, "cue_sentence": {"type": "integer"}},
+                "required": ["expr", "label", "cue_sentence"]}},
+            "marks": {"type": "array", "maxItems": 4, "items": {"type": "object", "properties": {
+                "kind": {"type": "string", "enum": ["hline", "vline", "point"]},
+                "x": {"type": ["number", "string", "null"]}, "y": {"type": ["number", "string", "null"]},
+                "label": {"type": "string"}, "cue_sentence": {"type": "integer"}},
+                "required": ["kind", "x", "y", "label", "cue_sentence"]}}},
+            "required": ["x_min", "x_max", "curves", "marks"]}
+        req += ["axis", "plot"]
     elif t == "quote_or_definition":
         base["quote"] = {"type": "object", "properties": {"text": {"type": "string"}, "attribution": {"type": "string"}},
                          "required": ["text", "attribution"]}
@@ -265,8 +288,14 @@ def validate_scene(scene: dict, cfg: dict, part_sentence_ids: list[int] | None =
             if len(r) != len(hs):
                 errs.append("every table row must have one cell per header")
                 break
-        if len(rows) > 6:
-            errs.append("table has more than 6 rows")
+        if len(rows) > 8:
+            errs.append("table has more than 8 rows")
+        if len(hs) > 6:
+            errs.append("table has more than 6 columns")
+        for c in tb.get("row_cues") or []:
+            if c not in sids:
+                errs.append(f"table row_cues value {c} is not one of this scene's sentences {sids}")
+                break
         if tb.get("cue_sentence") is not None and tb.get("cue_sentence") not in sids:
             errs.append("table cue_sentence not in scene sentences")
     if t in ("bar_chart", "number_line"):
@@ -294,6 +323,15 @@ def validate_scene(scene: dict, cfg: dict, part_sentence_ids: list[int] | None =
         errs.append("line_chart needs at least one curve item with a shape")
     if t == "diagram":
         errs += _validate_diagram(scene, sids)
+    if t == "plot":
+        from .plot import validate as validate_plot
+        errs += validate_plot(scene)
+        p = scene.get("plot") or {}
+        for part in (p.get("curves") or []) + (p.get("marks") or []):
+            if part.get("cue_sentence") not in sids:
+                errs.append(f"plot '{part.get('label', '')[:30]}' cue_sentence {part.get('cue_sentence')} not in {sids}")
+            if words(part.get("label", "")) > 5:
+                errs.append(f"plot label '{part.get('label', '')[:30]}' must be at most 5 words")
     return errs
 
 
@@ -334,6 +372,9 @@ def _validate_diagram(scene: dict, sids: list[int]) -> list[str]:
     return errs
 
 
+LONG_SCENE = 8
+
+
 def validate_grouping(groups: list[dict], body_ids: list[int], max_per_scene: int) -> list[str]:
     errs = []
     flat = [s for g in groups for s in g.get("sentences", [])]
@@ -351,8 +392,10 @@ def validate_grouping(groups: list[dict], body_ids: list[int], max_per_scene: in
             errs.append("scenes must list sentences in their original order")
     for g in groups:
         s = g.get("sentences", [])
-        if len(s) > max_per_scene:
-            errs.append(f"scene '{g.get('title', '')[:30]}' has {len(s)} sentences (max {max_per_scene})")
+        # a table or formula walked through row by row / term by term stays on screen the whole time
+        cap = max(max_per_scene, LONG_SCENE) if g.get("template") in ("table", "equation") else max_per_scene
+        if len(s) > cap:
+            errs.append(f"scene '{g.get('title', '')[:30]}' has {len(s)} sentences (max {cap})")
         if s and s != list(range(s[0], s[0] + len(s))):
             errs.append(f"scene '{g.get('title', '')[:30]}' sentences {s} are not consecutive")
         if not s:

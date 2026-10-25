@@ -15,6 +15,7 @@ llm:
   num_ctx: 4096
   self_check: true
   num_gpu: 99
+  strong_model: qwen3.5:9b   # second pass: scenes the small model failed or drew weakly ('' = off)
 model_selection:
   reason: qwen3.5:4b has the lowest parameter count (4.66B, from metadata (general.parameter_count))
     among 3 usable instruction-tuned chat model(s).

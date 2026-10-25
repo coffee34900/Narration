@@ -81,6 +81,12 @@ html,body{background:var(--bg);}
 .tbl th{font-weight:700;text-align:left;padding:18px 30px;border-bottom:3px solid currentColor;font-size:32px}
 .tbl td{padding:16px 30px;border-bottom:1px solid var(--line);color:var(--text);font-size:32px}
 .tbl tr:nth-child(even) td{background:var(--surface)}
+/* big grids read across the room: centred, larger, the row being narrated lights up */
+.tbl{margin:50px auto 0;font-variant-numeric:tabular-nums}
+.tbl th,.tbl td{font-size:40px;text-align:center}
+.tbl td.rh{font-weight:700;color:var(--accent)}
+.tbl tr[data-hl]{--hl:0}
+.tbl tr[data-hl] td{box-shadow:inset 0 0 0 999px rgba(94,234,212,calc(var(--hl) * .16))}
 
 /* timeline */
 .tl{position:relative;height:520px;margin-top:10px}
@@ -105,6 +111,19 @@ html,body{background:var(--bg);}
 .bar-v{font-size:34px;font-weight:700;white-space:nowrap}
 
 /* line chart */
+/* computed plot */
+.pl{position:relative;height:680px;margin-top:20px}
+.pl .lc-y{height:500px}
+.pl-grid{stroke:var(--line);stroke-width:1.5;opacity:.45}
+.pl-axis{stroke:var(--muted);stroke-width:3}
+.pl-curve{filter:drop-shadow(0 0 10px currentColor)}
+.pl-mark{stroke-width:4;stroke-dasharray:18 12}
+.pl-tracer{filter:drop-shadow(0 0 12px var(--accent))}
+.pl-tick{position:absolute;font-size:28px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pl-x{position:absolute;left:170px;width:1110px;text-align:center;font-size:30px;color:var(--muted)}
+.pl-leg{left:1340px;top:30px;width:330px}
+.pl-leg i.dash{height:0;border-top:5px dashed currentColor;background:none}
+.pl-leg i.dot{flex:0 0 22px;height:22px;border-radius:50%}
 .lc{position:relative;height:560px}
 .lc-y{position:absolute;left:0;top:0;width:60px;height:460px;font-size:28px;color:var(--muted);display:flex;align-items:center;justify-content:center}
 .lc-y span{transform:rotate(-90deg);white-space:nowrap;display:block}

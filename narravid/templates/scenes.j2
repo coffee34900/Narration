@@ -93,7 +93,7 @@
   {{ title(s, cls) }}
   <table class="tbl">
     <thead><tr class="{{ cls }}" data-rv="{{ s.table._t }}">{% for h in s.table.headers %}<th class="tx">{{ h }}</th>{% endfor %}</tr></thead>
-    <tbody>{% for r in s.table.rows %}<tr data-rv="{{ s.table._t + 0.35 * loop.index }}">{% for c in r %}<td class="tx">{{ c }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+    <tbody>{% for r in s.table.rows %}{% set rt = s.table._rows[loop.index0] %}<tr data-rv="{{ rt.t }}"{% if rt.hl is defined %} data-hl="{{ rt.hl }}" data-hlend="{{ rt.hl_end }}"{% endif %}>{% for c in r %}<td class="tx{{ ' rh' if loop.first and s.table.headers|length > 2 else '' }}">{{ c }}</td>{% endfor %}</tr>{% endfor %}</tbody>
   </table>
 </div>
 {%- endmacro %}
@@ -163,6 +163,39 @@
     </svg>
     <div class="lc-x tx">{{ (s.axis or {}).x_label }}</div>
     <div class="lc-leg">{% for c in g.curves %}<div class="c-{{ c.color }}" data-rv="{{ c.t }}"><i></i><span class="tx">{{ c.label }}</span></div>{% endfor %}</div>
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro plot(s, cls, g) -%}
+<div class="content">
+  {{ title(s, cls) }}
+  <div class="pl">
+    <div class="lc-y"><span class="tx">{{ (s.axis or {}).y_label }}</span></div>
+    <svg width="{{ g.w }}" height="{{ g.h }}" style="position:absolute;left:60px;top:0;overflow:visible">
+      <g data-fade="{{ s._t0 }}">
+        {% for t in g.yticks %}<line x1="{{ g.box.l }}" y1="{{ t.p }}" x2="{{ g.box.r }}" y2="{{ t.p }}" class="pl-grid"/>{% endfor %}
+        {% for t in g.xticks %}<line x1="{{ t.p }}" y1="{{ g.box.t }}" x2="{{ t.p }}" y2="{{ g.box.b }}" class="pl-grid"/>{% endfor %}
+        <line x1="{{ g.box.l }}" y1="{{ g.zero_y if g.zero_y is not none else g.box.b }}" x2="{{ g.box.r }}" y2="{{ g.zero_y if g.zero_y is not none else g.box.b }}" class="pl-axis"/>
+        <line x1="{{ g.zero_x if g.zero_x is not none else g.box.l }}" y1="{{ g.box.t }}" x2="{{ g.zero_x if g.zero_x is not none else g.box.l }}" y2="{{ g.box.b }}" class="pl-axis"/>
+      </g>
+      {% for m in g.marks %}
+        {% if m.kind == "hline" %}<line x1="{{ g.box.l }}" y1="{{ m.y }}" x2="{{ g.box.r }}" y2="{{ m.y }}" stroke="var(--{{ m.color }})" class="pl-mark" data-fade="{{ m.t }}"/>
+        {% elif m.kind == "vline" %}<line x1="{{ m.x }}" y1="{{ g.box.b }}" x2="{{ m.x }}" y2="{{ g.box.t }}" stroke="var(--{{ m.color }})" class="pl-mark" data-fade="{{ m.t }}"/>
+        {% else %}<circle cx="{{ m.x }}" cy="{{ m.y }}" r="13" fill="var(--{{ m.color }})" stroke="var(--bg)" stroke-width="4" data-pop="{{ m.t }}" style="transform-box:fill-box;transform-origin:center"/>{% endif %}
+      {% endfor %}
+      {% for c in g.curves %}
+      <path id="{{ c.id }}" d="{{ c.d }}" fill="none" stroke="var(--{{ c.color }})" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" class="pl-curve" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1" data-draw="{{ c.t }}"/>
+      {% endfor %}
+      {% if g.tracer %}{% set c = g.curves[0] %}<circle r="12" fill="var(--text)" class="pl-tracer" opacity="0" data-trace="{{ c.id }}" data-t="{{ c.t + 1.4 }}" data-end="{{ s._end }}"/>{% endif %}
+    </svg>
+    {% for t in g.xticks %}<div class="pl-tick tx" style="left:{{ 60 + t.p - 60 }}px;top:{{ g.box.b + 14 }}px;width:120px;text-align:center">{{ t.label }}</div>{% endfor %}
+    {% for t in g.yticks %}<div class="pl-tick tx" style="left:{{ 60 + g.box.l - 130 }}px;top:{{ t.p - 18 }}px;width:116px;text-align:right">{{ t.label }}</div>{% endfor %}
+    <div class="pl-x tx" style="top:{{ g.box.b + 60 }}px">{{ (s.axis or {}).x_label }}</div>
+    <div class="lc-leg pl-leg">
+      {% for c in g.curves %}<div data-rv="{{ c.t }}"><i style="color:var(--{{ c.color }})"></i><span class="tx">{{ c.label }}</span></div>{% endfor %}
+      {% for m in g.marks %}{% if m.label %}<div data-rv="{{ m.t }}"><i class="{{ 'dash' if m.kind != 'point' else 'dot' }}" style="color:var(--{{ m.color }})"></i><span class="tx">{{ m.label }}</span></div>{% endif %}{% endfor %}
+    </div>
   </div>
 </div>
 {%- endmacro %}

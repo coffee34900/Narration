@@ -128,6 +128,11 @@ def screen_texts(scene: dict) -> list[tuple[str, str]]:
         add(f"nodes[{i}].note", nd.get("note"))
     for i, e in enumerate(scene.get("edges") or []):
         add(f"edges[{i}].label", e.get("label"))
+    pl = scene.get("plot") or {}
+    for i, c in enumerate(pl.get("curves") or []):
+        add(f"plot.curves[{i}].label", c.get("label"))
+    for i, m in enumerate(pl.get("marks") or []):
+        add(f"plot.marks[{i}].label", m.get("label"))
     ax = scene.get("axis") or {}
     for f in ("unit", "x_label", "y_label"):
         add(f"axis.{f}", ax.get(f))
@@ -148,7 +153,7 @@ def latex_symbols(tex: str) -> list[str]:
 
 def is_schematic(scene: dict, idx: ScriptIndex) -> bool:
     t = scene.get("template")
-    if t in ("line_chart", "diagram"):        # conceptual drawings are illustrative by nature
+    if t in ("line_chart", "diagram", "plot"):    # a plot's formula is the model's reading of the text        # conceptual drawings are illustrative by nature
         return True
     if t in ("bar_chart", "number_line"):
         for it in scene.get("items") or []:

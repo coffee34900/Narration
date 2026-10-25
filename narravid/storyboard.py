@@ -35,20 +35,53 @@ STYLE RULES:
 """
 
 
-def _sentences_block(sents: list[dict]) -> str:
-    return "\n".join(f"[{s['id']}] {s['text']}" for s in sents)
+def _sentences_block(sents: list[dict], hints: bool = False) -> str:
+    def line(s):
+        h = visual_hint(s["text"]) if hints else None
+        return f"[{s['id']}] {s['text']}" + (f"   (looks like: {h})" if h else "")
+    return "\n".join(line(s) for s in sents)
+
+
+# ---------------------------------------------------------------------------- visual hints
+# Cheap, deterministic routing: a 4B model picks templates far better when the code has
+# already noticed "this sentence reads out a table" or "this sentence spells out a formula".
+_TABLE_CUE = re.compile(r"\b(row|rows|column|columns|cell|cells|entry|entries|table)\b", re.I)
+_MATH_CUE = re.compile(r"\b(sub|equals|plus|minus|times|squared|divided by|sum of|inequality|bound)\b|[=+−±≤≥]", re.I)
+_NUMBER = re.compile(r"\d|\b(zero|one|two|three|four|half|percent)\b", re.I)
+
+
+def visual_hint(text: str) -> str | None:
+    """'table' / 'equation' / 'key_number' when a sentence obviously reads one out, else None."""
+    nums = len(_NUMBER.findall(text))
+    if _TABLE_CUE.search(text) and nums >= 2:
+        return "table"
+    if len(_MATH_CUE.findall(text)) >= 2 and nums >= 1:
+        return "equation"
+    if re.search(r"(%|\bpercent\b|\bout of\b)", text, re.I):
+        return "key_number"
+    return None
+
+
+def scene_hint(sents: list[dict]) -> str | None:
+    """The visual a scene's sentences point at (table beats equation beats number)."""
+    hs = [visual_hint(s["text"]) for s in sents]
+    for h in ("table", "equation", "key_number"):
+        if hs.count(h) * 2 >= len(hs) or (h != "key_number" and hs.count(h) >= 2):
+            return h
+    return None
 
 
 def grouping_prompt(part: dict, body: list[dict], max_per_scene: int) -> list[dict]:
     templates = "\n".join(f"- {t}: {TEMPLATE_HELP[t]}" for t in LLM_TEMPLATES)
     user = f"""Part {part['part']}: "{part['title']}"
 
-Sentences:
-{_sentences_block(body)}
+Sentences (a "looks like" note is a strong hint for the template):
+{_sentences_block(body, hints=True)}
 
 Group these sentences into scenes. Rules:
 - Every sentence id from {body[0]['id']} to {body[-1]['id']} must appear in exactly one scene, in order.
-- Each scene is a run of consecutive sentences, 1 to {max_per_scene} sentences long.
+- Each scene is a run of consecutive sentences, 1 to {max_per_scene} sentences long
+  (a "table" or "equation" scene may be up to 8, so the viewer keeps one picture while it is explained).
 - Start a new scene when the topic or the kind of visual changes.
 - For each scene pick the best template:
 {templates}
@@ -59,6 +92,10 @@ Group these sentences into scenes. Rules:
   relate — something flows, causes, produces, measures, becomes, opposes or is compared with something else.
 - Use key_number / bar_chart / timeline / number_line / table only when the sentences contain the numbers or
   dates themselves. Use equation only for a stated formula.
+- When several sentences in a row read out rows, columns or cells, keep them in ONE "table" scene.
+  When sentences spell out a formula term by term, keep them in ONE "equation" scene.
+- Use "plot" when the sentences describe how one quantity depends on another (oscillates, decays,
+  grows as, falls off as, peaks at, versus angle/time/distance) or a curve against a bound.
 - Use bullet_list only when nothing can be drawn (pure opinions or lists of unrelated remarks).
 - Aim for at least half of the scenes to be "diagram". Never use the same template for three scenes in a row.
 
@@ -88,12 +125,35 @@ def content_prompt(part: dict, scene: dict, sents: list[dict]) -> list[dict]:
             '{"from": "s", "to": "d2", "label": "photons", "style": "flow", "cue_sentence": 4}]}\n'
             f"Icons available: {prompt_list()}."),
         "key_number": 'value = the number exactly as in the text (e.g. "75%", "1906", "0.08"); label = what it counts.',
-        "equation": "math = list of LaTeX strings (one per step, in the order narrated); items = up to 3 short notes.",
+        "equation": (
+            "math = list of LaTeX strings, one per step in the order narrated. Turn spoken maths into symbols: "
+            "\"E sub AB\" -> E_{AB}, \"minus\" -> -, \"less than or equal\" -> \\le. math_cues = for each step the "
+            "sentence id where it is said. items = up to 3 short notes. Build the formula up: each step may repeat "
+            "the previous one with one more term or with numbers substituted, ending in the result."),
         "comparison": "2-3 columns, each a heading and 1-3 short points.",
-        "table": "headers + rows of short cell strings; only values from the text.",
+        "table": (
+            "headers + rows of short cell strings; only values from the text. The first column usually names the "
+            "row (e.g. \"00\"). row_cues = for each row, the id of the sentence where the narration reads that row "
+            "(same length as rows). Keep cells tiny: digits, symbols, 1-3 words.\n"
+            "Example for \"[7] Row 00 reads 1 0 0 0. [8] Row 01 reads 0 1 0 0.\": "
+            '{"title": "Probability table", "table": {"headers": ["Cards", "00", "01", "10", "11"], '
+            '"rows": [["00", "1", "0", "0", "0"], ["01", "0", "1", "0", "0"]], "cue_sentence": 7, "row_cues": [7, 8]}}'),
         "timeline": "items in chronological order; when = the date/year from the text.",
         "number_line": "axis.min/max bracket all values; items = markers (value) or ranges (value..to). to = null for a single marker.",
         "bar_chart": "items = bars; text = bar label; value = the number from the text; unit e.g. \"%\".",
+        "plot": (
+            "A real, computed plot. curves[].expr = the formula in x using + - * / ^, numbers, pi, and only "
+            "sin cos tan exp log sqrt abs sinh cosh tanh arcsin arccos arctan gauss (gauss(x) = exp(-x^2/2)). "
+            "Use ONLY the relationship the sentences state (\"falls off as one over r squared\" -> 1/x^2, "
+            "\"oscillates\" -> sin(x)). x_min/x_max may be numbers or like \"2*pi\". marks = bounds, thresholds "
+            "or special points the sentences mention: hline (y = a bound, x null), vline (x = a value, y null), "
+            "point (both x and y). Labels 1-5 words from the sentences. axis labels = the quantities named.\n"
+            "Example for \"[12] The quantum correlation is 2 root 2 times cos of the angle. "
+            "[13] Classical strategies never exceed 2.\": "
+            '{"title": "Quantum beats the classical bound", "axis": {"x_label": "angle", "y_label": "correlation"}, '
+            '"plot": {"x_min": 0, "x_max": "pi", "curves": [{"expr": "2*sqrt(2)*cos(x)", "label": "Quantum", '
+            '"cue_sentence": 12}], "marks": [{"kind": "hline", "x": null, "y": 2, "label": "Classical bound", '
+            '"cue_sentence": 13}]}}'),
         "line_chart": "items = curves: text = curve label, shape = its qualitative trend. This chart is schematic.",
         "cards_grid": "items: head = 1-3 word concept name, text = one short line.",
         "flow": "items = the steps/boxes in order; arrows connect them.",
@@ -158,23 +218,31 @@ def llm_part(part: dict, cfg: dict, llm: LLM, log=print) -> list[dict]:
     scenes = [part_title_scene(part)] if any(s["heading"] for s in part["sentences"]) else []
     if not body:
         return scenes
-    ids = [s["id"] for s in body]
-    try:
-        grouping = llm.json(grouping_prompt(part, body, sb["max_sentences_per_scene"]), GROUPING_SCHEMA,
-                            validate=lambda o: validate_grouping(o["scenes"], ids, sb["max_sentences_per_scene"]),
-                            log=log)["scenes"]
-    except LLMError as e:
-        log(f"Part {part['part']}: grouping failed ({e}); using heuristic grouping")
-        per = min(3, sb["max_sentences_per_scene"])
-        grouping = [{"sentences": ids[k:k + per], "template": "bullet_list", "title": part["title"], "tag": "none"}
-                    for k in range(0, len(ids), per)]
+    grouping = []
+    # long parts overwhelm a small model: group them one window at a time
+    for w in range(0, len(body), GROUP_WINDOW):
+        ids = [s["id"] for s in body[w:w + GROUP_WINDOW]]
+        try:
+            grouping += llm.json(grouping_prompt(part, body[w:w + GROUP_WINDOW], sb["max_sentences_per_scene"]),
+                                 GROUPING_SCHEMA, log=log,
+                                 validate=lambda o, ids=ids: validate_grouping(o["scenes"], ids,
+                                                                              sb["max_sentences_per_scene"]))["scenes"]
+        except LLMError as e:
+            log(f"Part {part['part']}: grouping failed for sentences {ids[0]}-{ids[-1]} ({e}); heuristic grouping")
+            per = min(3, sb["max_sentences_per_scene"])
+            # no title: the part title repeated on every fallback scene says nothing
+            grouping += [{"sentences": ids[k:k + per], "template": "spoken", "title": "", "tag": "none"}
+                         for k in range(0, len(ids), per)]
     by_id = {s["id"]: s for s in body}
     for g in grouping:
         sents = [by_id[i] for i in g["sentences"]]
         scene = {"id": f"p{part['part']}s{len(scenes)}", "part": part["part"], "sentences": g["sentences"],
                  "template": g["template"], "title": g["title"], "tag": g.get("tag", "none"),
                  "source": "llm", "approved": None}
-        scenes.append(fill_scene(part, scene, sents, cfg, llm, log))
+        if g["template"] == "spoken":
+            scenes.append({**_fallback_scene(part, sents, cfg, 0), "id": scene["id"], "_retry": True})
+        else:
+            scenes.append(fill_scene(part, scene, sents, cfg, llm, log))
     return scenes
 
 
@@ -199,6 +267,7 @@ def fill_scene(part: dict, scene: dict, sents: list[dict], cfg: dict, llm: LLM, 
         fb = _fallback_scene(part, sents, cfg, 0, scene.get("title"))
         fb["id"] = scene["id"]
         fb["notes"] = [f"LLM could not produce a valid {t}; verbatim fallback used"]
+        fb["_retry"] = t
         return fb
 
 
@@ -216,10 +285,58 @@ def build(script: dict, cfg: dict, use_llm: bool = True, log=print, parts: list[
         log(f"Storyboard: part {part['part']} '{part['title']}' ({len(part['sentences'])} sentences)"
             + (" with LLM" if llm else " (heuristic, no LLM)"))
         scenes += llm_part(part, cfg, llm, log) if llm else heuristic_part(part, cfg)
+    if llm and cfg["llm"].get("strong_model"):
+        escalate(script, scenes, cfg, llm.with_model(cfg["llm"]["strong_model"]), log)
+    for sc in scenes:
+        sc.pop("_retry", None)
     _renumber(scenes)
     names = name_words(script)
     scenes = [sentence_case_scene(s, names) for s in scenes]
     return {"version": 1, "scenes": scenes}
+
+
+GROUP_WINDOW = 12
+
+
+def weak_scene(scene: dict, sents: list[dict]) -> str | None:
+    """The template a second pass should try, or None if the scene is fine as it is.
+
+    Failed scenes retry their own template; text-only scenes whose sentences clearly read out
+    a table / formula / number get that visual instead.
+    """
+    if scene.get("template") == "part_title":
+        return None
+    hint = scene_hint(sents)
+    if scene.get("template") in ("spoken", "bullet_list", "title_card") and hint:
+        return hint
+    retry = scene.get("_retry")
+    if isinstance(retry, str):
+        return retry
+    return "diagram" if retry else None
+
+
+def escalate(script: dict, scenes: list[dict], cfg: dict, strong: LLM, log=print) -> None:
+    """Stage 3: after the small model has done EVERY scene, the bigger model redoes the weak ones.
+
+    A separate pass (not interleaved) means Ollama swaps models on the GPU once, not per scene.
+    """
+    parts = {p["part"]: p for p in script["parts"]}
+    todo = []
+    for i, sc in enumerate(scenes):
+        part = parts[sc["part"]]
+        sents = [s for s in part["sentences"] if s["id"] in sc["sentences"]]
+        if t := weak_scene(sc, sents):
+            todo.append((i, part, sents, t))
+    if not todo:
+        return
+    log(f"Second pass: {len(todo)} scene(s) with {strong.model}")
+    for i, part, sents, t in todo:
+        sc = scenes[i]
+        base = {"id": sc["id"], "part": sc["part"], "sentences": sc["sentences"], "template": t,
+                "title": sc.get("title") or "", "tag": sc.get("tag", "none"), "source": "llm", "approved": None}
+        new = fill_scene(part, base, sents, cfg, strong, log)
+        if new["template"] != "spoken":           # big model failed too: keep the first version
+            scenes[i] = {**new, "source": "llm-strong"}
 
 
 # ---------------------------------------------------------------------------- tidying

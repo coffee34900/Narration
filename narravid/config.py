@@ -29,6 +29,7 @@ DEFAULTS: dict[str, Any] = {
         "num_ctx": 4096,       # each storyboard call is one part: small context is enough
         "num_gpu": 99,         # Ollama layers on GPU (99 = all); falls back automatically if it won't fit
         "self_check": True,
+        "strong_model": "",    # bigger local model for a second pass over failed/weak scenes
     },
     "model_selection": {"reason": "", "detected": []},
     "asr": {

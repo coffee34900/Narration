@@ -106,6 +106,37 @@ def with_defaults(scene: dict) -> dict:
     return scene
 
 
+def table_row_times(tb: dict, words_by_sid: dict, clamp, latest: float) -> list[dict]:
+    """Per row: when it appears (t) and the window it is highlighted (hl..hl_end).
+
+    Rows the narration reads out (row_cues) appear and light up as their sentence starts;
+    rows without a cue cascade in right after the header.
+    """
+    cues = tb.get("row_cues") or []
+    out, prev = [], tb["_t"]
+    for k, _ in enumerate(tb["rows"]):
+        cue = cues[k] if k < len(cues) else None
+        if cue in words_by_sid:
+            t = clamp(words_by_sid[cue][0]["start"])
+        else:
+            t = tb["_t"] + 0.35 * (k + 1)
+        t = round(min(max(t, prev + 0.15), latest), 3)
+        out.append({"t": t, "cued": cue in words_by_sid})
+        prev = t
+    return table_highlights(out, latest)
+
+
+def table_highlights(rows: list[dict], end: float) -> list[dict]:
+    # Default rule: a cued row is lit from the moment it is read until the next cued row starts
+    # (the last one stays lit to the end); uncued rows never light up.
+    cued = [r["t"] for r in rows if r["cued"]]
+    for r in rows:
+        if r["cued"]:
+            later = [t for t in cued if t > r["t"]]
+            r["hl"], r["hl_end"] = r["t"], (later[0] if later else end)
+    return rows
+
+
 def assign_reveals(scene: dict, win: dict, words_by_sid: dict, offset: float) -> dict:
     """Attach composition-local reveal times (_t*) to a copy of the scene."""
     m = design.MOTION
@@ -134,6 +165,7 @@ def assign_reveals(scene: dict, win: dict, words_by_sid: dict, offset: float) ->
     if s.get("table"):
         cs = s["table"].get("cue_sentence") or s["sentences"][0]
         s["table"]["_t"] = clamp((words_by_sid.get(cs) or [{"start": win["start"]}])[0]["start"])
+        s["table"]["_rows"] = table_row_times(s["table"], words_by_sid, clamp, latest)
     cues = s.get("math_cues") or []
     tm, prev = [], t0
     for k, _ in enumerate(s.get("math") or []):
@@ -148,6 +180,12 @@ def assign_reveals(scene: dict, win: dict, words_by_sid: dict, offset: float) ->
     s["_tv"] = clamp(cue_time(s.get("value", ""), s["sentences"][0], words_by_sid, win["start"])) \
         if s.get("value") else t0 + 0.3
     s["_count"] = count_parts(s.get("value") or "")
+    if s["template"] == "plot" and s.get("plot"):
+        pl = s["plot"]
+        # curves first, then the bounds/points they are compared with, each when it is said
+        seq(pl.get("curves") or [], lambda c: c.get("label", ""))
+        seq(pl.get("marks") or [], lambda m: m.get("label", ""))
+        s["_end"] = round(latest, 3)
     if s["template"] == "spoken":
         s["_spoken"] = spoken_lines(s, words_by_sid, offset, start, end)
     if s["template"] == "diagram" and s.get("nodes"):
@@ -317,6 +355,9 @@ def render_scene(env: Environment, s: dict, math_html: list[str], first_part_tit
         return str(macros.spoken(s, cls))
     if t == "equation":
         return str(macros.equation(s, cls, math_html))
+    if t == "plot":
+        from . import plot
+        return str(macros.plot(s, cls, plot.geometry(s, design.SERIES)))
     if t in ("timeline", "number_line", "bar_chart", "line_chart"):
         return str(getattr(macros, t)(s, cls, geometry(s)))
     return str(getattr(macros, t)(s, cls))

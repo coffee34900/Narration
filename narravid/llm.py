@@ -61,6 +61,13 @@ class LLM:
         if not self.model:
             raise LLMError("No LLM model configured (llm.model in config.yaml). Open the Models panel.")
 
+    def with_model(self, model: str) -> "LLM":
+        """Same settings, different local model (used to escalate hard scenes)."""
+        import copy
+        other = copy.copy(self)
+        other.model = model
+        return other
+
     # ------------------------------------------------------------------ transport
     def _post(self, url: str, payload: dict) -> dict:
         ensure_local(url)
